@@ -1,0 +1,2 @@
+{"level": "info", "service": "billing", "message": "invoice sent"}
+{"level": "error", "service": "billing", "message": "payment declined"}

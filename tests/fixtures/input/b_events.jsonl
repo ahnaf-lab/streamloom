@@ -1,0 +1,2 @@
+{"level": "error", "service": "auth", "message": "token expired"}
+{"level": "info", "service": "auth", "message": "login ok"}

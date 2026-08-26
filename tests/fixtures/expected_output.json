@@ -1,0 +1,8 @@
+[
+  {
+    "services_with_errors": [
+      "billing",
+      "auth"
+    ]
+  }
+]

@@ -6,7 +6,8 @@ pipeline defined in a small JSON config file. The config hot-reloads when it
 changes, and every run writes a structural diff against the previous output
 so the effect of an edit is visible immediately.
 
-This is an early milestone: the pipeline config schema and parser. The
+This is an early milestone: the pipeline config schema, and a deterministic
+executor that runs a config once over a directory of JSONL fixtures. The
 directory watcher, hot-reload loop, and diff output described above are not
 built yet.
 
@@ -65,6 +66,31 @@ from streamloom import read_jsonl
 
 records = list(read_jsonl("events.jsonl"))
 ```
+
+### Running a pipeline over a directory
+
+`execute` reads every `*.jsonl` file in a directory (concatenated in sorted
+filename order, so the result never depends on filesystem listing order),
+runs the pipeline once, and writes the result as a formatted JSON array:
+
+```python
+from streamloom import execute
+
+result = execute("pipeline.json", "events/", "output.json")
+```
+
+The same config and input directory always produce byte-identical output --
+keys are sorted and indentation is fixed -- since a later milestone diffs
+each run's output against the previous one.
+
+The same thing is available from the command line:
+
+```
+python -m streamloom run pipeline.json events/ output.json
+```
+
+This runs the pipeline once and exits; it does not yet watch the directory
+for new files.
 
 ### Stage reference
 

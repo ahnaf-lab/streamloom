@@ -1,0 +1,19 @@
+{
+  "stages": [
+    {
+      "type": "filter",
+      "conditions": [{"field": "level", "op": "eq", "value": "error"}]
+    },
+    {
+      "type": "map",
+      "select": ["service", "message"],
+      "rename": {"message": "msg"}
+    },
+    {
+      "type": "reduce",
+      "op": "collect",
+      "field": "service",
+      "as": "services_with_errors"
+    }
+  ]
+}
