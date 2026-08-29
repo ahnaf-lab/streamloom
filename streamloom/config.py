@@ -21,8 +21,9 @@ Example config::
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 Record = Dict[str, Any]
 
@@ -152,6 +153,31 @@ class ReduceStage:
 
 Stage = Union[FilterStage, MapStage, ReduceStage]
 
+_STAGE_TYPE_NAMES = {
+    FilterStage: "filter",
+    MapStage: "map",
+    ReduceStage: "reduce",
+}
+
+
+def stage_type_name(stage: Stage) -> str:
+    """Return the config `type` string (``"filter"``/``"map"``/``"reduce"``) for a stage."""
+    try:
+        return _STAGE_TYPE_NAMES[type(stage)]
+    except KeyError:  # pragma: no cover - guarded by the closed Stage union
+        raise ConfigError(f"unknown stage type {type(stage).__name__}") from None
+
+
+@dataclass(frozen=True)
+class StageTiming:
+    """How long one stage of a pipeline run took, and how many records it saw."""
+
+    index: int
+    type: str
+    input_count: int
+    output_count: int
+    elapsed_seconds: float
+
 
 @dataclass(frozen=True)
 class Pipeline:
@@ -160,10 +186,40 @@ class Pipeline:
     stages: List[Stage]
 
     def run(self, records: Iterable[Record]) -> List[Record]:
-        current: Iterable[Record] = records
-        for stage in self.stages:
-            current = stage.apply(current)
-        return list(current)
+        result, _timings = self.run_with_timings(records)
+        return result
+
+    def run_with_timings(
+        self,
+        records: Iterable[Record],
+        *,
+        clock: Callable[[], float] = time.perf_counter,
+    ) -> Tuple[List[Record], List[StageTiming]]:
+        """Run every stage in order, timing each one and counting its records.
+
+        Each stage is materialized to a list before the next one starts, so
+        the input/output counts and elapsed time reported for a stage are
+        exactly that stage's -- with the lazy generator chaining
+        :meth:`run` also uses internally, timing would smear across stage
+        boundaries as each generator pulls from the one before it.
+        """
+        current: List[Record] = list(records)
+        timings: List[StageTiming] = []
+        for index, stage in enumerate(self.stages):
+            input_count = len(current)
+            start = clock()
+            current = list(stage.apply(current))
+            elapsed = clock() - start
+            timings.append(
+                StageTiming(
+                    index=index,
+                    type=stage_type_name(stage),
+                    input_count=input_count,
+                    output_count=len(current),
+                    elapsed_seconds=elapsed,
+                )
+            )
+        return current, timings
 
 
 def _require_dict(value: Any, where: str) -> Dict[str, Any]:

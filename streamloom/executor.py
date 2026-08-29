@@ -16,11 +16,14 @@ from __future__ import annotations
 
 import json
 import os
-from typing import List
+import time
+from datetime import datetime, timezone
+from typing import List, Tuple
 
-from .config import Pipeline, Record, load_config
+from .config import Pipeline, Record, StageTiming, load_config
 from .diff import diff_report_path, read_previous_output, write_diff_report
 from .jsonl import read_jsonl
+from .status import RunStatus, status_report_path, write_status_report
 
 
 class ExecutorError(ValueError):
@@ -73,6 +76,14 @@ def run_pipeline(pipeline: Pipeline, input_dir: str) -> List[Record]:
     return pipeline.run(records)
 
 
+def run_pipeline_with_timings(
+    pipeline: Pipeline, input_dir: str
+) -> Tuple[List[Record], List[StageTiming]]:
+    """Like :func:`run_pipeline`, but also return per-stage timings and counts."""
+    records = load_input_records(input_dir)
+    return pipeline.run_with_timings(records)
+
+
 def execute(config_path: str, input_dir: str, output_path: str) -> List[Record]:
     """Load a config, run it over ``input_dir``, and write ``output_path``.
 
@@ -82,12 +93,45 @@ def execute(config_path: str, input_dir: str, output_path: str) -> List[Record]:
     happen before the write, or "previous" and "new" would already be the
     same file.
 
+    A run-status report is also written to ``status_report_path(output_path)``,
+    recording when the run started, how long it took overall and per stage,
+    and how many records went in and came out -- what ``python -m streamloom
+    status`` reads back.
+
     Returns the result records so callers (tests, the CLI) can inspect them
     without re-reading the output file.
     """
+    started_at = datetime.now(timezone.utc)
+    run_start = time.perf_counter()
+
     pipeline = load_config(config_path)
-    result = run_pipeline(pipeline, input_dir)
+    result, timings = run_pipeline_with_timings(pipeline, input_dir)
+    input_count = timings[0].input_count if timings else len(result)
+
     previous = read_previous_output(output_path)
     write_output(result, output_path)
     write_diff_report(previous, result, diff_report_path(output_path))
+
+    duration_seconds = time.perf_counter() - run_start
+    status = RunStatus(
+        config_path=config_path,
+        input_dir=input_dir,
+        output_path=output_path,
+        started_at=started_at.isoformat(),
+        duration_seconds=duration_seconds,
+        input_record_count=input_count,
+        output_record_count=len(result),
+        stages=[
+            {
+                "index": t.index,
+                "type": t.type,
+                "input_count": t.input_count,
+                "output_count": t.output_count,
+                "elapsed_seconds": t.elapsed_seconds,
+            }
+            for t in timings
+        ],
+    )
+    write_status_report(status, status_report_path(output_path))
+
     return result

@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 
-from streamloom.config import ConfigError, Pipeline, load_config, parse_config
+from streamloom.config import ConfigError, Pipeline, load_config, parse_config, stage_type_name
 
 
 class ParseConfigValidTest(unittest.TestCase):
@@ -168,6 +168,39 @@ class LoadConfigTest(unittest.TestCase):
                 json.dump({"stages": [{"type": "bogus"}]}, handle)
             with self.assertRaises(ConfigError):
                 load_config(path)
+
+
+class RunWithTimingsTest(unittest.TestCase):
+    def test_reports_one_timing_per_stage_with_correct_counts(self):
+        pipeline = parse_config(
+            {
+                "stages": [
+                    {"type": "filter", "conditions": [{"field": "level", "op": "eq", "value": "error"}]},
+                    {"type": "reduce", "op": "count", "as": "n"},
+                ]
+            }
+        )
+        records = [{"level": "error"}, {"level": "info"}, {"level": "error"}]
+        result, timings = pipeline.run_with_timings(records)
+
+        self.assertEqual(result, [{"n": 2}])
+        self.assertEqual(len(timings), 2)
+
+        self.assertEqual(timings[0].index, 0)
+        self.assertEqual(stage_type_name(pipeline.stages[0]), "filter")
+        self.assertEqual(timings[0].type, "filter")
+        self.assertEqual(timings[0].input_count, 3)
+        self.assertEqual(timings[0].output_count, 2)
+        self.assertGreaterEqual(timings[0].elapsed_seconds, 0.0)
+
+        self.assertEqual(timings[1].type, "reduce")
+        self.assertEqual(timings[1].input_count, 2)
+        self.assertEqual(timings[1].output_count, 1)
+
+    def test_run_and_run_with_timings_agree_on_result(self):
+        pipeline = parse_config({"stages": [{"type": "reduce", "op": "count"}]})
+        records = [{}, {}, {}]
+        self.assertEqual(pipeline.run(records), pipeline.run_with_timings(records)[0])
 
 
 if __name__ == "__main__":

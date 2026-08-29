@@ -6,8 +6,10 @@ from .config import (
     MapStage,
     Pipeline,
     ReduceStage,
+    StageTiming,
     load_config,
     parse_config,
+    stage_type_name,
 )
 from .diff import (
     DiffEntry,
@@ -23,9 +25,18 @@ from .executor import (
     execute,
     load_input_records,
     run_pipeline,
+    run_pipeline_with_timings,
     write_output,
 )
 from .jsonl import JSONLError, parse_jsonl_lines, read_jsonl
+from .status import (
+    RunStatus,
+    StatusError,
+    format_status,
+    read_status_report,
+    status_report_path,
+    write_status_report,
+)
 from .watcher import snapshot, watch
 
 __version__ = "0.1.0"
@@ -36,8 +47,10 @@ __all__ = [
     "MapStage",
     "Pipeline",
     "ReduceStage",
+    "StageTiming",
     "load_config",
     "parse_config",
+    "stage_type_name",
     "JSONLError",
     "parse_jsonl_lines",
     "read_jsonl",
@@ -46,6 +59,7 @@ __all__ = [
     "execute",
     "load_input_records",
     "run_pipeline",
+    "run_pipeline_with_timings",
     "write_output",
     "snapshot",
     "watch",
@@ -55,4 +69,10 @@ __all__ = [
     "format_diff",
     "read_previous_output",
     "write_diff_report",
+    "RunStatus",
+    "StatusError",
+    "format_status",
+    "read_status_report",
+    "status_report_path",
+    "write_status_report",
 ]

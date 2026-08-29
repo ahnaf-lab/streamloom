@@ -6,11 +6,11 @@ pipeline defined in a small JSON config file. The config hot-reloads when it
 changes, and every run writes a structural diff against the previous output
 so the effect of an edit is visible immediately.
 
-This is an early milestone: the pipeline config schema, a deterministic
-executor that runs a config once over a directory of JSONL fixtures, a
-debounced watcher that re-runs the pipeline when the config or input
-directory changes, and a structural diff report written alongside each run's
-output.
+Built so far: the pipeline config schema, a deterministic executor that runs
+a config once over a directory of JSONL fixtures, a debounced watcher that
+re-runs the pipeline when the config or input directory changes, a
+structural diff report written alongside each run's output, and a `status`
+command showing the last run's timing and record counts.
 
 ## Install
 
@@ -165,6 +165,40 @@ This runs the pipeline once immediately, then keeps watching and re-running
 until interrupted with Ctrl-C. `--interval` controls how often the watcher
 polls (in seconds); `--debounce` controls how long the watched files must
 stay unchanged before a re-run fires.
+
+### Checking the status of the last run
+
+Every `run` (and every re-run triggered by `watch`) writes a small JSON
+report to `<output path>.status.json` alongside the output and diff files,
+recording when it started, how long each stage took, and how many records
+went in and came out. `status` reads that report back:
+
+```
+$ python -m streamloom status output.json
+last run:  2026-08-29T12:00:00+00:00
+config:    pipeline.json
+input:     events/ (4 record(s))
+output:    output.json (1 record(s))
+duration:  0.001s
+stages:
+  [0] filter: 4 -> 2 record(s) in 0.000s
+  [1] map: 2 -> 2 record(s) in 0.000s
+  [2] reduce: 2 -> 1 record(s) in 0.000s
+```
+
+Timings are wall-clock and stage-scoped: each stage is fully materialized
+before the next one starts (unlike the lazily-chained generators `run`
+executes internally), so a stage's reported time and record counts are
+exactly its own rather than smeared across the pipeline. If `output.json`
+has never been produced by a run, `status` exits with an error saying so
+instead of printing a stale or empty report.
+
+```python
+from streamloom import read_status_report, format_status
+
+status = read_status_report("output.json")
+print(format_status(status))
+```
 
 ### Stage reference
 

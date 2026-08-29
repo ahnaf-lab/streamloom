@@ -2,10 +2,13 @@
 
     python -m streamloom run pipeline.json input_dir/ output.json
     python -m streamloom watch pipeline.json input_dir/ output.json
+    python -m streamloom status output.json
 
 ``run`` performs a single deterministic pass. ``watch`` re-runs the pipeline
 whenever the config or input directory changes, debounced so a burst of
-rapid edits collapses into one re-run once things settle.
+rapid edits collapses into one re-run once things settle. ``status`` reports
+on the last ``run``/``watch`` iteration for a given output path: when it
+happened, how long each stage took, and how many records went in and out.
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ import sys
 from .config import ConfigError
 from .executor import ExecutorError, execute
 from .jsonl import JSONLError
+from .status import StatusError, format_status, read_status_report
 from .watcher import watch
 
 
@@ -49,6 +53,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=1.0,
         help="quiet period required before re-running, in seconds (default: 1.0)",
     )
+
+    status_parser = subparsers.add_parser(
+        "status",
+        help="show the last run's timestamp, stage timings, and record counts",
+    )
+    status_parser.add_argument("output", help="the output path passed to a previous run/watch")
 
     return parser
 
@@ -84,6 +94,18 @@ def main(argv: list[str] | None = None) -> int:
             )
         except KeyboardInterrupt:
             print("streamloom: stopped", file=sys.stderr)
+        return 0
+
+    if args.command == "status":
+        try:
+            status = read_status_report(args.output)
+        except StatusError as exc:
+            print(f"streamloom: {exc}", file=sys.stderr)
+            return 1
+        if status is None:
+            print(f"streamloom: no run recorded yet for {args.output}", file=sys.stderr)
+            return 1
+        print(format_status(status), end="")
         return 0
 
     parser.error(f"unknown command {args.command!r}")  # pragma: no cover
