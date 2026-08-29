@@ -9,6 +9,14 @@ from .config import (
     load_config,
     parse_config,
 )
+from .diff import (
+    DiffEntry,
+    diff_report_path,
+    diff_values,
+    format_diff,
+    read_previous_output,
+    write_diff_report,
+)
 from .executor import (
     ExecutorError,
     discover_input_files,
@@ -41,4 +49,10 @@ __all__ = [
     "write_output",
     "snapshot",
     "watch",
+    "DiffEntry",
+    "diff_report_path",
+    "diff_values",
+    "format_diff",
+    "read_previous_output",
+    "write_diff_report",
 ]

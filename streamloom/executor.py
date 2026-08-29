@@ -3,12 +3,13 @@
 Given a pipeline config and a directory of ``*.jsonl`` files, :func:`execute`
 reads every input file in a fixed order, runs the configured pipeline over
 the concatenated records, and writes the result to an output file as a
-formatted JSON array.
+formatted JSON array. Alongside that file it writes a structural diff
+against whatever was previously at the output path, so the effect of an
+edit -- to the config, or to the input -- is visible immediately.
 
 The output is written deterministically -- same stages, same input bytes,
-same output bytes every time -- because a later milestone diffs each run's
-output against the previous one, and a diff is only meaningful if unrelated
-formatting noise can never appear in it.
+same output bytes every time -- because the diff against the previous run
+is only meaningful if unrelated formatting noise can never appear in it.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import os
 from typing import List
 
 from .config import Pipeline, Record, load_config
+from .diff import diff_report_path, read_previous_output, write_diff_report
 from .jsonl import read_jsonl
 
 
@@ -74,10 +76,18 @@ def run_pipeline(pipeline: Pipeline, input_dir: str) -> List[Record]:
 def execute(config_path: str, input_dir: str, output_path: str) -> List[Record]:
     """Load a config, run it over ``input_dir``, and write ``output_path``.
 
+    Before ``output_path`` is overwritten, whatever is already there is read
+    and diffed against the new result; the report is written to
+    ``diff_report_path(output_path)``. Reading the previous output has to
+    happen before the write, or "previous" and "new" would already be the
+    same file.
+
     Returns the result records so callers (tests, the CLI) can inspect them
     without re-reading the output file.
     """
     pipeline = load_config(config_path)
     result = run_pipeline(pipeline, input_dir)
+    previous = read_previous_output(output_path)
     write_output(result, output_path)
+    write_diff_report(previous, result, diff_report_path(output_path))
     return result

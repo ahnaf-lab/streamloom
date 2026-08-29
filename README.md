@@ -7,10 +7,10 @@ changes, and every run writes a structural diff against the previous output
 so the effect of an edit is visible immediately.
 
 This is an early milestone: the pipeline config schema, a deterministic
-executor that runs a config once over a directory of JSONL fixtures, and a
+executor that runs a config once over a directory of JSONL fixtures, a
 debounced watcher that re-runs the pipeline when the config or input
-directory changes. The structural diff output described above is not built
-yet.
+directory changes, and a structural diff report written alongside each run's
+output.
 
 ## Install
 
@@ -81,8 +81,9 @@ result = execute("pipeline.json", "events/", "output.json")
 ```
 
 The same config and input directory always produce byte-identical output --
-keys are sorted and indentation is fixed -- since a later milestone diffs
-each run's output against the previous one.
+keys are sorted and indentation is fixed -- since each run diffs its output
+against the previous one, and a diff is only meaningful if unrelated
+formatting noise can never appear in it.
 
 The same thing is available from the command line:
 
@@ -91,6 +92,45 @@ python -m streamloom run pipeline.json events/ output.json
 ```
 
 This runs the pipeline once and exits.
+
+### Diffing against the previous run
+
+Every `execute` call reads whatever is already at the output path *before*
+overwriting it, diffs the decoded JSON of the old and new results, and
+writes a plain-text report to `<output path>.diff`:
+
+```
+$ python -m streamloom run pipeline.json events/ output.json
+wrote 1 record(s) to output.json
+$ cat output.json.diff
+no previous output -- this is the initial run
+$ echo '{"level": "error", "service": "billing"}' >> events/more.jsonl
+$ python -m streamloom run pipeline.json events/ output.json
+wrote 1 record(s) to output.json
+$ cat output.json.diff
++ $[0].services_with_errors[1] = "billing"
+```
+
+The diff is structural, not textual: it walks the decoded JSON values
+(dicts key by key, lists index by index) rather than comparing formatted
+text, so reordering that changes nothing never shows up as a change. Each
+line is one of:
+
+- `+ path = value` -- added
+- `- path = value` -- removed
+- `~ path: old -> new` -- changed
+
+If nothing changed since the previous run, the report reads `no change`.
+If there is no previous output to compare against (the first run, or a file
+that was not valid JSON), it reads `no previous output -- this is the
+initial run` instead of listing every field as newly added.
+
+```python
+from streamloom import diff_values, format_diff
+
+entries = diff_values({"count": 1}, {"count": 2})
+format_diff(entries, is_initial=False)  # -> "~ $.count: 1 -> 2\n"
+```
 
 ### Watching for changes
 
