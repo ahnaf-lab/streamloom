@@ -120,6 +120,44 @@ class CliTest(unittest.TestCase):
             exit_code = cli.main(["run", PIPELINE_CONFIG, "/no/such/dir", out_path])
             self.assertEqual(exit_code, 1)
 
+    def test_main_watch_parses_flags_and_invokes_watcher_once(self):
+        # Stub cli.watch so this exercises argument wiring and the on_change
+        # callback without running a real, unbounded polling loop.
+        calls = []
+        original_watch = cli.watch
+
+        def fake_watch(config, input_dir, on_change, *, poll_interval, debounce):
+            calls.append((config, input_dir, poll_interval, debounce))
+            on_change()
+            return 1
+
+        cli.watch = fake_watch
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                out_path = os.path.join(tmp, "out.json")
+                exit_code = cli.main(
+                    [
+                        "watch",
+                        PIPELINE_CONFIG,
+                        INPUT_DIR,
+                        out_path,
+                        "--interval",
+                        "0.25",
+                        "--debounce",
+                        "2.0",
+                    ]
+                )
+                self.assertEqual(exit_code, 0)
+                with open(out_path, "r", encoding="utf-8") as handle:
+                    self.assertEqual(
+                        json.load(handle), [{"services_with_errors": ["billing", "auth"]}]
+                    )
+        finally:
+            cli.watch = original_watch
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0], (PIPELINE_CONFIG, INPUT_DIR, 0.25, 2.0))
+
 
 if __name__ == "__main__":
     unittest.main()

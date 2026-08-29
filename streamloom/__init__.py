@@ -18,6 +18,7 @@ from .executor import (
     write_output,
 )
 from .jsonl import JSONLError, parse_jsonl_lines, read_jsonl
+from .watcher import snapshot, watch
 
 __version__ = "0.1.0"
 
@@ -38,4 +39,6 @@ __all__ = [
     "load_input_records",
     "run_pipeline",
     "write_output",
+    "snapshot",
+    "watch",
 ]

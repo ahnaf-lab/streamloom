@@ -6,10 +6,11 @@ pipeline defined in a small JSON config file. The config hot-reloads when it
 changes, and every run writes a structural diff against the previous output
 so the effect of an edit is visible immediately.
 
-This is an early milestone: the pipeline config schema, and a deterministic
-executor that runs a config once over a directory of JSONL fixtures. The
-directory watcher, hot-reload loop, and diff output described above are not
-built yet.
+This is an early milestone: the pipeline config schema, a deterministic
+executor that runs a config once over a directory of JSONL fixtures, and a
+debounced watcher that re-runs the pipeline when the config or input
+directory changes. The structural diff output described above is not built
+yet.
 
 ## Install
 
@@ -89,8 +90,41 @@ The same thing is available from the command line:
 python -m streamloom run pipeline.json events/ output.json
 ```
 
-This runs the pipeline once and exits; it does not yet watch the directory
-for new files.
+This runs the pipeline once and exits.
+
+### Watching for changes
+
+`watch` re-runs the pipeline whenever the config file or any `*.jsonl` file
+in the input directory changes. There is no dependency on an OS-level
+filesystem-event API (inotify, FSEvents, and so on differ per platform and
+would each pull in a third-party binding); instead it polls file
+modification time and size at a fixed interval.
+
+A raw "re-run on every change" loop is unusable in practice -- an editor can
+produce several write events for one save, and a producer appending records
+line-by-line would otherwise trigger a run per line. `watch` waits for a
+debounce period of no further change before re-running, so a burst of edits
+collapses into a single re-run once things settle:
+
+```python
+from streamloom import watch
+
+def on_change():
+    print("input or config changed, re-running")
+
+watch("pipeline.json", "events/", on_change, poll_interval=0.5, debounce=1.0)
+```
+
+From the command line:
+
+```
+python -m streamloom watch pipeline.json events/ output.json --interval 0.5 --debounce 1.0
+```
+
+This runs the pipeline once immediately, then keeps watching and re-running
+until interrupted with Ctrl-C. `--interval` controls how often the watcher
+polls (in seconds); `--debounce` controls how long the watched files must
+stay unchanged before a re-run fires.
 
 ### Stage reference
 
